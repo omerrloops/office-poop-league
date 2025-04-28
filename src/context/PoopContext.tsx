@@ -148,6 +148,12 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // If we have a stored userId but it doesn't match any user in the database
           localStorage.removeItem('userId');
           localStorage.removeItem('userNickname');
+          // Remove any Supabase auth tokens
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('sb-')) {
+              localStorage.removeItem(key);
+            }
+          });
           window.location.reload();
           return;
         }
