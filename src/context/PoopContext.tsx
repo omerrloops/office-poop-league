@@ -143,6 +143,15 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Set the current user based on the stored userId in metadata
         const userId = authUser.user_metadata.userId || localStorage.getItem('userId');
         const currentUserData = transformedUsers.find(u => u.id === userId);
+        
+        if (userId && !currentUserData) {
+          // If we have a stored userId but it doesn't match any user in the database
+          localStorage.removeItem('userId');
+          localStorage.removeItem('userNickname');
+          window.location.reload();
+          return;
+        }
+        
         if (currentUserData) {
           setCurrentUser(currentUserData);
           
