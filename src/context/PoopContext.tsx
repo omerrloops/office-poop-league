@@ -140,8 +140,9 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setUsers(transformedUsers);
         
-        // Set the current user based on the authenticated user
-        const currentUserData = transformedUsers.find(u => u.id === authUser.id);
+        // Set the current user based on the stored userId in metadata
+        const userId = authUser.user_metadata.userId || localStorage.getItem('userId');
+        const currentUserData = transformedUsers.find(u => u.id === userId);
         if (currentUserData) {
           setCurrentUser(currentUserData);
         }

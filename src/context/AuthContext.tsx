@@ -49,64 +49,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('name', nickname)
         .single();
 
+      // Sign in anonymously first
+      const { data: { user: anonymousUser }, error: signInError } = await supabase.auth.signInAnonymously();
+      if (signInError) throw signInError;
+      if (!anonymousUser) throw new Error('Failed to sign in');
+
       if (existingUser) {
-        // If user exists, sign in anonymously and link to existing user
-        const { data: { user: anonymousUser }, error: signInError } = await supabase.auth.signInAnonymously();
-        if (signInError) throw signInError;
+        // Update the existing user record with the new auth ID
+        const { error: updateUserError } = await supabase
+          .from('users')
+          .update({ 
+            user_id: anonymousUser.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingUser.id);
 
-        if (!anonymousUser) throw new Error('Failed to sign in');
+        if (updateUserError) throw updateUserError;
 
-        // Update the user's metadata with their nickname
+        // Update the user's metadata
         const { error: updateError } = await supabase.auth.updateUser({
-          data: { nickname }
+          data: { 
+            nickname,
+            userId: existingUser.id // Store the user's ID in metadata
+          }
         });
         if (updateError) throw updateError;
 
-        // Store nickname in localStorage
+        // Store nickname and user ID in localStorage
         localStorage.setItem('userNickname', nickname);
+        localStorage.setItem('userId', existingUser.id);
 
         toast({
           title: 'Success',
           description: `Welcome back, ${nickname}!`,
         });
-
-        // Redirect to home page
-        navigate('/');
-        return;
-      }
-
-      // If user doesn't exist, create new account
-      const { data: { user: anonymousUser }, error: signInError } = await supabase.auth.signInAnonymously();
-      if (signInError) throw signInError;
-
-      if (!anonymousUser) throw new Error('Failed to create user');
-
-      // Create user record in users table
-      const { error: createUserError } = await supabase
-        .from('users')
-        .insert({
-          user_id: anonymousUser.id,
+      } else {
+        // Create new user record
+        const newUser = {
           id: anonymousUser.id,
+          user_id: anonymousUser.id,
           name: nickname,
           avatar: '💩',
-          total_time_weekly: 0
+          total_time_weekly: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        const { error: createUserError } = await supabase
+          .from('users')
+          .insert(newUser);
+
+        if (createUserError) throw createUserError;
+
+        // Update the user's metadata
+        const { error: updateError } = await supabase.auth.updateUser({
+          data: { 
+            nickname,
+            userId: anonymousUser.id
+          }
         });
+        if (updateError) throw updateError;
 
-      if (createUserError) throw createUserError;
+        // Store nickname and user ID in localStorage
+        localStorage.setItem('userNickname', nickname);
+        localStorage.setItem('userId', anonymousUser.id);
 
-      // Update the user's metadata with their nickname
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: { nickname }
-      });
-      if (updateError) throw updateError;
-
-      // Store nickname in localStorage
-      localStorage.setItem('userNickname', nickname);
-
-      toast({
-        title: 'Success',
-        description: `Welcome, ${nickname}!`,
-      });
+        toast({
+          title: 'Success',
+          description: `Welcome, ${nickname}!`,
+        });
+      }
 
       // Redirect to home page
       navigate('/');
@@ -128,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Clear stored user data
       localStorage.removeItem('userNickname');
+      localStorage.removeItem('userId');
 
       toast({
         title: 'Success',
