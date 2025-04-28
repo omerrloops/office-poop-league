@@ -1,16 +1,13 @@
-
 import React, { useState } from 'react';
 import { usePoopContext, formatTime } from '../context/PoopContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import AchievementBadge from './AchievementBadge';
 
 const UserProfile: React.FC = () => {
-  const { currentUser, updateUserName, updateUserAvatar, isLoading } = usePoopContext();
-  const [name, setName] = useState(currentUser?.name || '');
+  const { currentUser, updateUserAvatar, isLoading } = usePoopContext();
   const [avatar, setAvatar] = useState(currentUser?.avatar || '');
   const [isEditing, setIsEditing] = useState(false);
   
@@ -22,10 +19,6 @@ const UserProfile: React.FC = () => {
   ];
   
   const handleSave = () => {
-    if (name.trim()) {
-      updateUserName(name);
-    }
-    
     if (avatar) {
       updateUserAvatar(avatar);
     }
@@ -99,19 +92,6 @@ const UserProfile: React.FC = () => {
         
         {isEditing ? (
           <div className="space-y-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Display Name
-              </label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full"
-                placeholder="Enter your name"
-                maxLength={20}
-              />
-            </div>
-            
             <div className="flex justify-center space-x-2">
               <Button variant="outline" onClick={() => setIsEditing(false)}>
                 Cancel

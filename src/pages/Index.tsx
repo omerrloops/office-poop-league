@@ -1,10 +1,10 @@
-
 import React from 'react';
 import { PoopProvider } from '../context/PoopContext';
 import PoopButton from '../components/PoopButton';
 import Timer from '../components/Timer';
 import Leaderboard from '../components/Leaderboard';
 import WeeklyWinner from '../components/WeeklyWinner';
+import ActivePoopers from '../components/ActivePoopers';
 import { Link } from 'react-router-dom';
 
 const Index = () => {
@@ -34,6 +34,7 @@ const Index = () => {
             </div>
             
             <div className="mt-8 space-y-10">
+              <ActivePoopers />
               <WeeklyWinner />
               <Leaderboard compact />
             </div>
