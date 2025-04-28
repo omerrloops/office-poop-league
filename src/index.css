@@ -5,7 +5,7 @@
 
 @layer base {
   :root {
-    --background: 43 74% 94%;
+    --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
@@ -14,16 +14,16 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 25 76% 31%;
+    --primary: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 43 74% 94%;
+    --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 43 89% 50%;
+    --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
@@ -31,9 +31,14 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 25 76% 31%;
+    --ring: 222.2 84% 4.9%;
 
-    --radius: 1rem;
+    --radius: 0.5rem;
+
+    --poop: 28 35% 40%;
+    --poop-dark: 28 40% 25%;
+    --poop-bg: 28 60% 90%;
+    --poop-accent: 28 78% 59%;
   }
 
   .dark {
@@ -71,37 +76,32 @@
   * {
     @apply border-border;
   }
-
   body {
-    @apply bg-poop-bg text-foreground font-bubbly;
+    @apply bg-background text-foreground;
   }
 }
 
 @layer components {
   .poop-button {
-    @apply relative flex items-center justify-center w-64 h-64 md:w-72 md:h-72 
-           rounded-full bg-poop text-white text-2xl font-bold shadow-lg 
-           transition-all duration-300 hover:scale-105 active:scale-95
-           before:content-[''] before:absolute before:inset-0 before:rounded-full 
-           before:bg-poop-light before:opacity-0 hover:before:opacity-20
-           overflow-hidden;
+    @apply w-48 h-48 rounded-full flex items-center justify-center bg-poop-bg border-4 border-poop 
+    hover:bg-poop hover:text-white transition-all duration-300 shadow-lg text-poop;
   }
 
   .poop-button-active {
-    @apply bg-poop-dark animate-pulse;
+    @apply bg-poop text-white scale-110 animate-pulse;
+  }
+
+  .timer-display {
+    @apply text-4xl font-bold text-poop my-4 tabular-nums;
   }
 
   .leaderboard-item {
-    @apply flex items-center justify-between p-4 mb-2 rounded-xl bg-white
-           shadow-md transition-all duration-200 hover:shadow-lg;
+    @apply flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100;
   }
 
-  .achievement-badge {
-    @apply flex items-center justify-center w-12 h-12 rounded-full
-           bg-poop-accent text-poop-dark font-bold text-xl shadow-md;
-  }
-
+  /* For the winner crown animation */
   .winner-crown {
-    @apply text-4xl text-poop-accent animate-crown-drop;
+    @apply text-5xl animate-bounce;
+    animation-duration: 2s;
   }
 }

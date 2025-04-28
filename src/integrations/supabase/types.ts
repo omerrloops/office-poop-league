@@ -9,7 +9,128 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      achievements: {
+        Row: {
+          description: string
+          emoji: string
+          id: string
+          name: string
+        }
+        Insert: {
+          description: string
+          emoji: string
+          id?: string
+          name: string
+        }
+        Update: {
+          description?: string
+          emoji?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      poop_sessions: {
+        Row: {
+          created_at: string | null
+          duration: number | null
+          end_time: string | null
+          id: string
+          start_time: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          duration?: number | null
+          end_time?: string | null
+          id?: string
+          start_time: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          duration?: number | null
+          end_time?: string | null
+          id?: string
+          start_time?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poop_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_achievements: {
+        Row: {
+          achievement_id: string | null
+          id: string
+          unlocked_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          achievement_id?: string | null
+          id?: string
+          unlocked_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          achievement_id?: string | null
+          id?: string
+          unlocked_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_achievements_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "achievements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_achievements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          avatar: string
+          created_at: string | null
+          id: string
+          name: string
+          total_time_weekly: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          avatar: string
+          created_at?: string | null
+          id?: string
+          name: string
+          total_time_weekly?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          avatar?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          total_time_weekly?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

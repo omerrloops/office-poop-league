@@ -1,5 +1,7 @@
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 // Types for our context
 type User = {
@@ -26,52 +28,6 @@ type Achievement = {
   unlocked: boolean;
 };
 
-// Mock data for testing
-const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'ThroneMaster',
-    avatar: '💩',
-    totalTimeWeekly: 3600, // seconds
-    poopSessions: [
-      { id: '1', startTime: new Date(Date.now() - 86400000), endTime: new Date(Date.now() - 86400000 + 600000), duration: 600 }
-    ],
-    achievements: [
-      { id: '1', name: 'First Timer', emoji: '🎯', description: 'First poop tracked', unlocked: true },
-      { id: '2', name: 'Lightning Pooper', emoji: '⚡', description: 'Complete a session under 1 minute', unlocked: false },
-      { id: '3', name: 'Marathon Man', emoji: '🏃‍♂️', description: 'Session longer than 30 minutes', unlocked: false },
-    ]
-  },
-  {
-    id: '2',
-    name: 'ToiletKing',
-    avatar: '👑',
-    totalTimeWeekly: 5400, // seconds
-    poopSessions: [
-      { id: '2', startTime: new Date(Date.now() - 172800000), endTime: new Date(Date.now() - 172800000 + 900000), duration: 900 }
-    ],
-    achievements: [
-      { id: '1', name: 'First Timer', emoji: '🎯', description: 'First poop tracked', unlocked: true },
-      { id: '2', name: 'Lightning Pooper', emoji: '⚡', description: 'Complete a session under 1 minute', unlocked: true },
-      { id: '3', name: 'Marathon Man', emoji: '🏃‍♂️', description: 'Session longer than 30 minutes', unlocked: false },
-    ]
-  },
-  {
-    id: '3',
-    name: 'PoopMaster3000',
-    avatar: '🤖',
-    totalTimeWeekly: 7200, // seconds - the leader!
-    poopSessions: [
-      { id: '3', startTime: new Date(Date.now() - 259200000), endTime: new Date(Date.now() - 259200000 + 1200000), duration: 1200 }
-    ],
-    achievements: [
-      { id: '1', name: 'First Timer', emoji: '🎯', description: 'First poop tracked', unlocked: true },
-      { id: '2', name: 'Lightning Pooper', emoji: '⚡', description: 'Complete a session under 1 minute', unlocked: false },
-      { id: '3', name: 'Marathon Man', emoji: '🏃‍♂️', description: 'Session longer than 30 minutes', unlocked: true },
-    ]
-  }
-];
-
 // Context type
 type PoopContextType = {
   currentUser: User | null;
@@ -80,6 +36,7 @@ type PoopContextType = {
   isPooping: boolean;
   weeklyWinner: User | null;
   daysUntilReset: number;
+  isLoading: boolean;
   
   // Methods
   startPooping: () => void;
@@ -92,128 +49,467 @@ const PoopContext = createContext<PoopContextType | undefined>(undefined);
 
 export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [currentSession, setCurrentSession] = useState<PoopSession | null>(null);
   const [isPooping, setIsPooping] = useState(false);
   const [weeklyWinner, setWeeklyWinner] = useState<User | null>(null);
   const [daysUntilReset, setDaysUntilReset] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize with mock user for demo
+  // Calculate days until Monday (start of week)
   useEffect(() => {
-    setCurrentUser(mockUsers[0]);
-    
-    // Calculate days until Monday (start of week)
     const now = new Date();
     const daysFromMonday = (now.getDay() + 6) % 7; // Convert to Monday = 0, Sunday = 6
     setDaysUntilReset(7 - daysFromMonday);
-    
-    // Find weekly winner (user with highest total time)
-    const winner = [...mockUsers].sort((a, b) => b.totalTimeWeekly - a.totalTimeWeekly)[0];
-    setWeeklyWinner(winner);
   }, []);
 
-  const startPooping = () => {
+  // Initialize data from Supabase
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setIsLoading(true);
+        
+        // Fetch all users
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('*')
+          .order('total_time_weekly', { ascending: false });
+          
+        if (usersError) throw usersError;
+
+        // If no users exist, create a default user
+        if (!usersData || usersData.length === 0) {
+          const defaultUser = {
+            user_id: 'default-user-id',
+            name: 'ThroneMaster',
+            avatar: '💩',
+            total_time_weekly: 0
+          };
+          
+          const { data: newUser, error: createError } = await supabase
+            .from('users')
+            .insert(defaultUser)
+            .select()
+            .single();
+            
+          if (createError) throw createError;
+          
+          if (newUser) {
+            // Unlock the first achievement for the new user
+            const { data: achievements } = await supabase
+              .from('achievements')
+              .select('*')
+              .eq('name', 'First Timer')
+              .single();
+              
+            if (achievements) {
+              await supabase
+                .from('user_achievements')
+                .insert({
+                  user_id: newUser.id,
+                  achievement_id: achievements.id
+                });
+            }
+            
+            usersData.push(newUser);
+          }
+        }
+
+        // Transform and set the users data
+        const transformedUsers = await Promise.all(usersData.map(async (user) => {
+          // Fetch poop sessions for each user
+          const { data: sessions } = await supabase
+            .from('poop_sessions')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('start_time', { ascending: false });
+
+          // Fetch achievements for each user
+          const { data: userAchievements } = await supabase
+            .from('user_achievements')
+            .select(`
+              achievement_id,
+              achievements (
+                id, name, emoji, description
+              )
+            `)
+            .eq('user_id', user.id);
+
+          // Get all achievements to show locked ones too
+          const { data: allAchievements } = await supabase
+            .from('achievements')
+            .select('*');
+
+          // Create a complete achievements list with unlocked status
+          const achievements = (allAchievements || []).map(achievement => {
+            const isUnlocked = (userAchievements || []).some(ua => 
+              ua.achievement_id === achievement.id
+            );
+            
+            return {
+              id: achievement.id,
+              name: achievement.name,
+              emoji: achievement.emoji,
+              description: achievement.description,
+              unlocked: isUnlocked
+            };
+          });
+
+          return {
+            id: user.id,
+            name: user.name,
+            avatar: user.avatar,
+            totalTimeWeekly: user.total_time_weekly || 0,
+            poopSessions: (sessions || []).map(session => ({
+              id: session.id,
+              startTime: new Date(session.start_time),
+              endTime: session.end_time ? new Date(session.end_time) : null,
+              duration: session.duration || null
+            })),
+            achievements
+          };
+        }));
+
+        setUsers(transformedUsers);
+        
+        // Set the current user to the first user for now (in a real app, this would be the logged-in user)
+        if (transformedUsers.length > 0) {
+          setCurrentUser(transformedUsers[0]);
+        }
+        
+        // Find weekly winner (user with highest total time)
+        if (transformedUsers.length > 0) {
+          const winner = [...transformedUsers].sort((a, b) => b.totalTimeWeekly - a.totalTimeWeekly)[0];
+          setWeeklyWinner(winner);
+        }
+      } catch (error) {
+        console.error('Error fetching data from Supabase:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load data. Please try again later.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  const startPooping = async () => {
     if (isPooping || !currentUser) return;
     
-    const newSession: PoopSession = {
-      id: Date.now().toString(),
-      startTime: new Date(),
-      endTime: null,
-      duration: null
-    };
-    
-    setCurrentSession(newSession);
-    setIsPooping(true);
+    try {
+      const newSession = {
+        user_id: currentUser.id,
+        start_time: new Date().toISOString(),
+        end_time: null,
+        duration: null
+      };
+      
+      const { data, error } = await supabase
+        .from('poop_sessions')
+        .insert(newSession)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      if (data) {
+        const sessionObj = {
+          id: data.id,
+          startTime: new Date(data.start_time),
+          endTime: null,
+          duration: null
+        };
+        
+        setCurrentSession(sessionObj);
+        setIsPooping(true);
+      }
+    } catch (error) {
+      console.error('Error starting poop session:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to start poop session. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const stopPooping = () => {
+  const stopPooping = async () => {
     if (!isPooping || !currentUser || !currentSession) return;
     
-    const endTime = new Date();
-    const duration = Math.floor((endTime.getTime() - currentSession.startTime.getTime()) / 1000);
-    
-    const updatedSession = {
-      ...currentSession,
-      endTime,
-      duration
-    };
-    
-    // Update user's sessions and total time
-    if (currentUser) {
-      const updatedUser = {
-        ...currentUser,
-        poopSessions: [...currentUser.poopSessions, updatedSession],
-        totalTimeWeekly: currentUser.totalTimeWeekly + duration
-      };
+    try {
+      const endTime = new Date();
+      const duration = Math.floor((endTime.getTime() - currentSession.startTime.getTime()) / 1000);
       
-      setCurrentUser(updatedUser);
+      // Update the session in database
+      const { error: sessionError } = await supabase
+        .from('poop_sessions')
+        .update({
+          end_time: endTime.toISOString(),
+          duration
+        })
+        .eq('id', currentSession.id);
+        
+      if (sessionError) throw sessionError;
       
-      // Update the user in the list
-      setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
-    }
-    
-    // Check for achievements
-    checkAchievements(duration);
-    
-    setCurrentSession(null);
-    setIsPooping(false);
-  };
-
-  const checkAchievements = (duration: number) => {
-    if (!currentUser) return;
-    
-    const updatedAchievements = [...currentUser.achievements];
-    
-    // Check for Lightning Pooper (under 60 seconds)
-    if (duration < 60) {
-      const lightningPooper = updatedAchievements.find(a => a.id === '2');
-      if (lightningPooper && !lightningPooper.unlocked) {
-        lightningPooper.unlocked = true;
+      // Update user's total time
+      const newTotalTime = currentUser.totalTimeWeekly + duration;
+      
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          total_time_weekly: newTotalTime,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentUser.id);
+        
+      if (userError) throw userError;
+      
+      // Check for achievements
+      await checkAchievements(duration);
+      
+      // Update the local state
+      setCurrentUser(prev => {
+        if (!prev) return null;
+        
+        const updatedSession = {
+          ...currentSession,
+          endTime,
+          duration
+        };
+        
+        return {
+          ...prev,
+          totalTimeWeekly: newTotalTime,
+          poopSessions: [...prev.poopSessions, updatedSession]
+        };
+      });
+      
+      // Update the users array
+      setUsers(prev => 
+        prev.map(user => 
+          user.id === currentUser.id 
+            ? { 
+                ...user, 
+                totalTimeWeekly: newTotalTime,
+                poopSessions: [...user.poopSessions, {
+                  ...currentSession,
+                  endTime,
+                  duration
+                }]
+              } 
+            : user
+        )
+      );
+      
+      // Check if this user is now the weekly winner
+      if (!weeklyWinner || newTotalTime > weeklyWinner.totalTimeWeekly) {
+        setWeeklyWinner({
+          ...currentUser,
+          totalTimeWeekly: newTotalTime
+        });
       }
-    }
-    
-    // Check for Marathon Man (over 30 minutes)
-    if (duration > 1800) {
-      const marathonMan = updatedAchievements.find(a => a.id === '3');
-      if (marathonMan && !marathonMan.unlocked) {
-        marathonMan.unlocked = true;
-      }
-    }
-    
-    // Update the user with new achievements
-    if (currentUser) {
-      const updatedUser = {
-        ...currentUser,
-        achievements: updatedAchievements
-      };
       
-      setCurrentUser(updatedUser);
-      setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
+      // Reset current session
+      setCurrentSession(null);
+      setIsPooping(false);
+      
+      toast({
+        title: 'Session Completed',
+        description: `You pooped for ${formatTime(duration)}!`,
+      });
+    } catch (error) {
+      console.error('Error stopping poop session:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to stop poop session. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
-  const updateUserName = (name: string) => {
+  const checkAchievements = async (duration: number) => {
     if (!currentUser) return;
     
-    const updatedUser = {
-      ...currentUser,
-      name
-    };
-    
-    setCurrentUser(updatedUser);
-    setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
+    try {
+      // Get all achievements
+      const { data: achievements } = await supabase
+        .from('achievements')
+        .select('*');
+        
+      if (!achievements) return;
+      
+      // Check for Lightning Pooper (under 60 seconds)
+      if (duration < 60) {
+        const lightningPooper = achievements.find(a => a.name === 'Lightning Pooper');
+        if (lightningPooper) {
+          await unlockAchievement(lightningPooper.id);
+        }
+      }
+      
+      // Check for Marathon Man (over 30 minutes)
+      if (duration > 1800) {
+        const marathonMan = achievements.find(a => a.name === 'Marathon Man');
+        if (marathonMan) {
+          await unlockAchievement(marathonMan.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking achievements:', error);
+    }
   };
 
-  const updateUserAvatar = (avatar: string) => {
+  const unlockAchievement = async (achievementId: string) => {
     if (!currentUser) return;
     
-    const updatedUser = {
-      ...currentUser,
-      avatar
-    };
+    try {
+      // Check if already unlocked
+      const { data: existing } = await supabase
+        .from('user_achievements')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('achievement_id', achievementId)
+        .maybeSingle();
+        
+      if (existing) return; // Already unlocked
+      
+      // Unlock the achievement
+      await supabase
+        .from('user_achievements')
+        .insert({
+          user_id: currentUser.id,
+          achievement_id: achievementId
+        });
+      
+      // Get achievement details
+      const { data: achievement } = await supabase
+        .from('achievements')
+        .select('*')
+        .eq('id', achievementId)
+        .single();
+        
+      if (achievement) {
+        // Update local state
+        setCurrentUser(prev => {
+          if (!prev) return null;
+          
+          const updatedAchievements = prev.achievements.map(a => 
+            a.id === achievementId ? { ...a, unlocked: true } : a
+          );
+          
+          return {
+            ...prev,
+            achievements: updatedAchievements
+          };
+        });
+        
+        // Update users array
+        setUsers(prev =>
+          prev.map(user => {
+            if (user.id === currentUser.id) {
+              return {
+                ...user,
+                achievements: user.achievements.map(a => 
+                  a.id === achievementId ? { ...a, unlocked: true } : a
+                )
+              };
+            }
+            return user;
+          })
+        );
+        
+        // Show toast
+        toast({
+          title: 'Achievement Unlocked! 🏆',
+          description: `${achievement.name}: ${achievement.description}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error unlocking achievement:', error);
+    }
+  };
+
+  const updateUserName = async (name: string) => {
+    if (!currentUser || !name.trim()) return;
     
-    setCurrentUser(updatedUser);
-    setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ name })
+        .eq('id', currentUser.id);
+        
+      if (error) throw error;
+      
+      // Update local state
+      setCurrentUser(prev => prev ? { ...prev, name } : null);
+      
+      // Update users array
+      setUsers(prev => 
+        prev.map(user => 
+          user.id === currentUser.id ? { ...user, name } : user
+        )
+      );
+      
+      // Update weekly winner if current user is the winner
+      if (weeklyWinner && weeklyWinner.id === currentUser.id) {
+        setWeeklyWinner(prev => prev ? { ...prev, name } : null);
+      }
+      
+      toast({
+        title: 'Profile Updated',
+        description: 'Your name has been updated successfully.',
+      });
+    } catch (error) {
+      console.error('Error updating name:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update your name. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const updateUserAvatar = async (avatar: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ avatar })
+        .eq('id', currentUser.id);
+        
+      if (error) throw error;
+      
+      // Update local state
+      setCurrentUser(prev => prev ? { ...prev, avatar } : null);
+      
+      // Update users array
+      setUsers(prev => 
+        prev.map(user => 
+          user.id === currentUser.id ? { ...user, avatar } : user
+        )
+      );
+      
+      // Update weekly winner if current user is the winner
+      if (weeklyWinner && weeklyWinner.id === currentUser.id) {
+        setWeeklyWinner(prev => prev ? { ...prev, avatar } : null);
+      }
+      
+      toast({
+        title: 'Profile Updated',
+        description: 'Your avatar has been updated successfully.',
+      });
+    } catch (error) {
+      console.error('Error updating avatar:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update your avatar. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -225,6 +521,7 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isPooping,
         weeklyWinner,
         daysUntilReset,
+        isLoading,
         startPooping,
         stopPooping,
         updateUserName,
