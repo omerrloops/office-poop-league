@@ -215,13 +215,14 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
               table: 'poop_sessions'
             },
             async (payload: RealtimePoopSessionPayload) => {
+              console.log('Received poop session update:', payload); // Debug log
               if (!payload.new) return;
               const sessionData = payload.new;
               const userId = sessionData.user_id;
 
               // Update the users state with the new session
               setUsers(prevUsers => {
-                return prevUsers.map(user => {
+                const updatedUsers = prevUsers.map(user => {
                   if (user.id === userId) {
                     // Update or add the session to the user's sessions
                     const existingSessionIndex = user.poopSessions.findIndex(
@@ -252,6 +253,8 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   }
                   return user;
                 });
+                console.log('Updated users state:', updatedUsers); // Debug log
+                return updatedUsers;
               });
 
               // If this affects the current user, update their state too
@@ -284,8 +287,7 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
               }
             }
-          )
-          .subscribe();
+          );
 
         // Also subscribe to user updates for total time changes
         const userUpdatesSubscription = supabase
@@ -298,12 +300,13 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
               table: 'users'
             },
             async (payload: RealtimeUserPayload) => {
+              console.log('Received user update:', payload); // Debug log
               if (!payload.new) return;
               const userData = payload.new;
               
               // Update users array
-              setUsers(prevUsers => 
-                prevUsers.map(user => 
+              setUsers(prevUsers => {
+                const updatedUsers = prevUsers.map(user => 
                   user.id === userData.id 
                     ? { 
                         ...user, 
@@ -312,8 +315,10 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         avatar: userData.avatar
                       }
                     : user
-                )
-              );
+                );
+                console.log('Updated users after user change:', updatedUsers); // Debug log
+                return updatedUsers;
+              });
 
               // Update current user if needed
               if (currentUser && userData.id === currentUser.id) {
@@ -339,11 +344,21 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 );
               }
             }
-          )
-          .subscribe();
+          );
+
+        // Connect both channels
+        Promise.all([
+          poopSessionsSubscription.subscribe(),
+          userUpdatesSubscription.subscribe()
+        ]).then(() => {
+          console.log('Successfully subscribed to real-time updates');
+        }).catch(error => {
+          console.error('Error subscribing to real-time updates:', error);
+        });
 
         // Cleanup subscriptions on unmount
         return () => {
+          console.log('Cleaning up subscriptions');
           poopSessionsSubscription.unsubscribe();
           userUpdatesSubscription.unsubscribe();
         };
