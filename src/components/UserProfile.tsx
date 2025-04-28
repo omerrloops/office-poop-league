@@ -4,15 +4,22 @@ import { usePoopContext, formatTime } from '../context/PoopContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import AchievementBadge from './AchievementBadge';
 
 const UserProfile: React.FC = () => {
-  const { currentUser, updateUserName, updateUserAvatar } = usePoopContext();
+  const { currentUser, updateUserName, updateUserAvatar, isLoading } = usePoopContext();
   const [name, setName] = useState(currentUser?.name || '');
   const [avatar, setAvatar] = useState(currentUser?.avatar || '');
   const [isEditing, setIsEditing] = useState(false);
   
-  const avatarOptions = ['💩', '🚽', '🧻', '🧠', '👑', '🤖', '🐱', '🦄', '🐵', '🦊'];
+  // Extended avatar options
+  const avatarOptions = [
+    '💩', '🚽', '🧻', '🧠', '👑', '🤖', '🐱', '🦄', '🐵', '🦊',
+    '🦁', '🐶', '🐼', '🐨', '🦀', '🐢', '🦈', '🐬', '🐙', '🦧',
+    '🐸', '🦜', '🦚', '🦉', '🦇', '🐺', '🐮', '🐷', '🐭', '🐹'
+  ];
   
   const handleSave = () => {
     if (name.trim()) {
@@ -26,7 +33,36 @@ const UserProfile: React.FC = () => {
     setIsEditing(false);
   };
   
-  if (!currentUser) return <div>Loading...</div>;
+  if (isLoading) {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader>
+          <Skeleton className="h-8 w-40 mx-auto" />
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-center mb-6">
+            <Skeleton className="w-24 h-24 rounded-full" />
+          </div>
+          <div className="text-center mb-6">
+            <Skeleton className="h-6 w-32 mx-auto mb-2" />
+            <Skeleton className="h-4 w-24 mx-auto" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+          <Skeleton className="h-4 w-40 mb-3" />
+          <div className="grid grid-cols-3 gap-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="aspect-square rounded-xl" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  if (!currentUser) return null;
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -35,23 +71,30 @@ const UserProfile: React.FC = () => {
       </CardHeader>
       <CardContent>
         <div className="flex justify-center mb-6">
-          <div className="w-24 h-24 rounded-full bg-poop-bg flex items-center justify-center text-5xl">
-            {isEditing ? (
-              <div className="grid grid-cols-5 gap-2 p-2">
+          {isEditing ? (
+            <div className="mb-4">
+              <p className="text-sm font-medium text-gray-700 mb-2 text-center">
+                Select an Avatar
+              </p>
+              <div className="grid grid-cols-5 gap-2 max-h-32 overflow-y-auto p-2 border rounded-lg">
                 {avatarOptions.map((emojiOption) => (
                   <button
                     key={emojiOption}
-                    className={`w-8 h-8 flex items-center justify-center rounded-full ${avatar === emojiOption ? 'bg-poop-accent' : 'hover:bg-gray-100'}`}
+                    className={`w-8 h-8 flex items-center justify-center rounded-full ${avatar === emojiOption ? 'bg-poop-accent text-white' : 'hover:bg-gray-100'}`}
                     onClick={() => setAvatar(emojiOption)}
                   >
                     {emojiOption}
                   </button>
                 ))}
               </div>
-            ) : (
-              currentUser.avatar
-            )}
-          </div>
+            </div>
+          ) : (
+            <Avatar className="w-24 h-24 bg-poop-bg text-5xl">
+              <AvatarFallback className="bg-poop-bg">
+                {currentUser.avatar}
+              </AvatarFallback>
+            </Avatar>
+          )}
         </div>
         
         {isEditing ? (

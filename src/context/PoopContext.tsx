@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
@@ -269,7 +268,7 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (userError) throw userError;
       
       // Check for achievements
-      await checkAchievements(duration);
+      await checkAchievements(duration, endTime);
       
       // Update the local state
       setCurrentUser(prev => {
@@ -331,7 +330,7 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const checkAchievements = async (duration: number) => {
+  const checkAchievements = async (duration: number, endTime: Date = new Date()) => {
     if (!currentUser) return;
     
     try {
@@ -357,6 +356,61 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await unlockAchievement(marathonMan.id);
         }
       }
+      
+      // Check for Power Pooper (10 sessions)
+      if (currentUser.poopSessions.length >= 9) { // Current session is not yet counted
+        const powerPooper = achievements.find(a => a.name === 'Power Pooper');
+        if (powerPooper) {
+          await unlockAchievement(powerPooper.id);
+        }
+      }
+      
+      // Check for Throne Master (2+ hours total)
+      const totalTimeInSeconds = currentUser.totalTimeWeekly + duration;
+      if (totalTimeInSeconds >= 7200) { // 2 hours = 7200 seconds
+        const throneMaster = achievements.find(a => a.name === 'Throne Master');
+        if (throneMaster) {
+          await unlockAchievement(throneMaster.id);
+        }
+      }
+      
+      // Check for Early Bird (before 7 AM)
+      const hour = endTime.getHours();
+      if (hour < 7) {
+        const earlyBird = achievements.find(a => a.name === 'Early Bird');
+        if (earlyBird) {
+          await unlockAchievement(earlyBird.id);
+        }
+      }
+      
+      // Check for Night Owl (after 10 PM)
+      if (hour >= 22) {
+        const nightOwl = achievements.find(a => a.name === 'Night Owl');
+        if (nightOwl) {
+          await unlockAchievement(nightOwl.id);
+        }
+      }
+      
+      // Check for Weekend Warrior
+      const dayOfWeek = endTime.getDay(); // 0 is Sunday, 6 is Saturday
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        // Count weekend sessions
+        const weekendSessions = currentUser.poopSessions.filter(session => {
+          const sessionDay = new Date(session.startTime).getDay();
+          return sessionDay === 0 || sessionDay === 6;
+        }).length;
+        
+        if (weekendSessions >= 2) { // Current one is the third
+          const weekendWarrior = achievements.find(a => a.name === 'Weekend Warrior');
+          if (weekendWarrior) {
+            await unlockAchievement(weekendWarrior.id);
+          }
+        }
+      }
+      
+      // Note: Consistency King, Holiday Dump, and Traveler would need more complex logic
+      // and additional data tracking which we can implement later
+      
     } catch (error) {
       console.error('Error checking achievements:', error);
     }
