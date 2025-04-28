@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from './AuthContext';
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // Types for our context
 type User = {
@@ -26,6 +27,34 @@ type Achievement = {
   emoji: string;
   description: string;
   unlocked: boolean;
+};
+
+// Add these types at the top with other types
+interface DatabasePoopSession {
+  id: string;
+  user_id: string;
+  start_time: string;
+  end_time: string | null;
+  duration: number | null;
+}
+
+interface DatabaseUser {
+  id: string;
+  name: string;
+  avatar: string;
+  total_time_weekly: number;
+}
+
+type RealtimePoopSessionPayload = RealtimePostgresChangesPayload<{
+  [key: string]: any;
+}> & {
+  new: DatabasePoopSession;
+};
+
+type RealtimeUserPayload = RealtimePostgresChangesPayload<{
+  [key: string]: any;
+}> & {
+  new: DatabaseUser;
 };
 
 // Context type
@@ -185,45 +214,138 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
               schema: 'public',
               table: 'poop_sessions'
             },
-            async (payload) => {
-              // Refresh the data when poop sessions change
-              const { data: updatedUsersData } = await supabase
-                .from('users')
-                .select('id, name, avatar, total_time_weekly')
-                .order('total_time_weekly', { ascending: false });
+            async (payload: RealtimePoopSessionPayload) => {
+              if (!payload.new) return;
+              const sessionData = payload.new;
+              const userId = sessionData.user_id;
 
-              if (updatedUsersData) {
-                const updatedUsers = await Promise.all(updatedUsersData.map(async (user) => {
-                  const { data: sessions } = await supabase
-                    .from('poop_sessions')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('start_time', { ascending: false });
+              // Update the users state with the new session
+              setUsers(prevUsers => {
+                return prevUsers.map(user => {
+                  if (user.id === userId) {
+                    // Update or add the session to the user's sessions
+                    const existingSessionIndex = user.poopSessions.findIndex(
+                      s => s.id === sessionData.id
+                    );
+
+                    const updatedSession = {
+                      id: sessionData.id,
+                      startTime: new Date(sessionData.start_time),
+                      endTime: sessionData.end_time ? new Date(sessionData.end_time) : null,
+                      duration: sessionData.duration || null
+                    };
+
+                    let updatedSessions;
+                    if (existingSessionIndex >= 0) {
+                      // Update existing session
+                      updatedSessions = [...user.poopSessions];
+                      updatedSessions[existingSessionIndex] = updatedSession;
+                    } else {
+                      // Add new session
+                      updatedSessions = [...user.poopSessions, updatedSession];
+                    }
+
+                    return {
+                      ...user,
+                      poopSessions: updatedSessions
+                    };
+                  }
+                  return user;
+                });
+              });
+
+              // If this affects the current user, update their state too
+              if (currentUser && userId === currentUser.id) {
+                setCurrentUser(prev => {
+                  if (!prev) return null;
+                  const existingSessionIndex = prev.poopSessions.findIndex(
+                    s => s.id === sessionData.id
+                  );
+
+                  const updatedSession = {
+                    id: sessionData.id,
+                    startTime: new Date(sessionData.start_time),
+                    endTime: sessionData.end_time ? new Date(sessionData.end_time) : null,
+                    duration: sessionData.duration || null
+                  };
+
+                  let updatedSessions;
+                  if (existingSessionIndex >= 0) {
+                    updatedSessions = [...prev.poopSessions];
+                    updatedSessions[existingSessionIndex] = updatedSession;
+                  } else {
+                    updatedSessions = [...prev.poopSessions, updatedSession];
+                  }
 
                   return {
-                    id: user.id,
-                    name: user.name,
-                    avatar: user.avatar,
-                    totalTimeWeekly: user.total_time_weekly || 0,
-                    poopSessions: (sessions || []).map(session => ({
-                      id: session.id,
-                      startTime: new Date(session.start_time),
-                      endTime: session.end_time ? new Date(session.end_time) : null,
-                      duration: session.duration || null
-                    })),
-                    achievements: [] // We don't need achievements for real-time updates
+                    ...prev,
+                    poopSessions: updatedSessions
                   };
-                }));
-
-                setUsers(updatedUsers);
+                });
               }
             }
           )
           .subscribe();
 
-        // Cleanup subscription on unmount
+        // Also subscribe to user updates for total time changes
+        const userUpdatesSubscription = supabase
+          .channel('user_updates')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'users'
+            },
+            async (payload: RealtimeUserPayload) => {
+              if (!payload.new) return;
+              const userData = payload.new;
+              
+              // Update users array
+              setUsers(prevUsers => 
+                prevUsers.map(user => 
+                  user.id === userData.id 
+                    ? { 
+                        ...user, 
+                        totalTimeWeekly: userData.total_time_weekly || 0,
+                        name: userData.name,
+                        avatar: userData.avatar
+                      }
+                    : user
+                )
+              );
+
+              // Update current user if needed
+              if (currentUser && userData.id === currentUser.id) {
+                setCurrentUser(prev => 
+                  prev ? { 
+                    ...prev, 
+                    totalTimeWeekly: userData.total_time_weekly || 0,
+                    name: userData.name,
+                    avatar: userData.avatar
+                  } : null
+                );
+              }
+
+              // Update weekly winner if needed
+              if (weeklyWinner && userData.id === weeklyWinner.id) {
+                setWeeklyWinner(prev => 
+                  prev ? { 
+                    ...prev, 
+                    totalTimeWeekly: userData.total_time_weekly || 0,
+                    name: userData.name,
+                    avatar: userData.avatar
+                  } : null
+                );
+              }
+            }
+          )
+          .subscribe();
+
+        // Cleanup subscriptions on unmount
         return () => {
           poopSessionsSubscription.unsubscribe();
+          userUpdatesSubscription.unsubscribe();
         };
       } catch (error) {
         console.error('Error fetching data from Supabase:', error);
