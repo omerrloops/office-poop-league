@@ -64,7 +64,7 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDaysUntilReset(7 - daysFromMonday);
   }, []);
 
-  // Initialize data from Supabase
+  // Initialize data from Supabase and set up real-time subscriptions
   useEffect(() => {
     async function fetchData() {
       if (!authUser) {
@@ -145,6 +145,13 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const currentUserData = transformedUsers.find(u => u.id === userId);
         if (currentUserData) {
           setCurrentUser(currentUserData);
+          
+          // Check if current user has an active session
+          const activeSession = currentUserData.poopSessions.find(session => session.endTime === null);
+          if (activeSession) {
+            setCurrentSession(activeSession);
+            setIsPooping(true);
+          }
         }
         
         // Find weekly winner (user with highest total time)
@@ -152,6 +159,57 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const winner = [...transformedUsers].sort((a, b) => b.totalTimeWeekly - a.totalTimeWeekly)[0];
           setWeeklyWinner(winner);
         }
+
+        // Set up real-time subscriptions
+        const poopSessionsSubscription = supabase
+          .channel('poop_sessions_changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'poop_sessions'
+            },
+            async (payload) => {
+              // Refresh the data when poop sessions change
+              const { data: updatedUsersData } = await supabase
+                .from('users')
+                .select('id, name, avatar, total_time_weekly')
+                .order('total_time_weekly', { ascending: false });
+
+              if (updatedUsersData) {
+                const updatedUsers = await Promise.all(updatedUsersData.map(async (user) => {
+                  const { data: sessions } = await supabase
+                    .from('poop_sessions')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('start_time', { ascending: false });
+
+                  return {
+                    id: user.id,
+                    name: user.name,
+                    avatar: user.avatar,
+                    totalTimeWeekly: user.total_time_weekly || 0,
+                    poopSessions: (sessions || []).map(session => ({
+                      id: session.id,
+                      startTime: new Date(session.start_time),
+                      endTime: session.end_time ? new Date(session.end_time) : null,
+                      duration: session.duration || null
+                    })),
+                    achievements: [] // We don't need achievements for real-time updates
+                  };
+                }));
+
+                setUsers(updatedUsers);
+              }
+            }
+          )
+          .subscribe();
+
+        // Cleanup subscription on unmount
+        return () => {
+          poopSessionsSubscription.unsubscribe();
+        };
       } catch (error) {
         console.error('Error fetching data from Supabase:', error);
         toast({
