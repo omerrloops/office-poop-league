@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,7 +62,16 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+				// Custom poop theme colors
+				poop: {
+					DEFAULT: '#8B4513', // Main poop brown
+					light: '#A0522D', // Lighter brown
+					dark: '#654321', // Darker brown
+					accent: '#FFD700', // Gold accent
+					blue: '#33C3F0', // Throne blue
+					bg: '#FDF5E6', // Soft background
+				},
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
@@ -84,11 +94,47 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'bounce-slight': {
+					'0%, 100%': {
+						transform: 'translateY(0)'
+					},
+					'50%': {
+						transform: 'translateY(-10px)'
+					}
+				},
+				'spin-slow': {
+					'0%': {
+						transform: 'rotate(0deg)'
+					},
+					'100%': {
+						transform: 'rotate(360deg)'
+					}
+				},
+				'crown-drop': {
+					'0%': {
+						transform: 'translateY(-50px) scale(0.5)',
+						opacity: '0'
+					},
+					'70%': {
+						transform: 'translateY(10px) scale(1.2)',
+						opacity: '1'
+					},
+					'100%': {
+						transform: 'translateY(0) scale(1)',
+						opacity: '1'
+					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'bounce-slight': 'bounce-slight 1s infinite ease-in-out',
+				'spin-slow': 'spin-slow 10s linear infinite',
+				'crown-drop': 'crown-drop 1s ease-out forwards'
+			},
+			fontFamily: {
+				bubbly: ['Comic Sans MS', 'Comic Sans', 'cursive'],
 			}
 		}
 	},
