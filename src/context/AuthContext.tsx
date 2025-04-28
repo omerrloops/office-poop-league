@@ -34,11 +34,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (nickname: string) => {
     try {
-      // First, sign in anonymously
+      // First, check if nickname is already taken
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('name')
+        .eq('name', nickname)
+        .single();
+
+      if (existingUser) {
+        toast({
+          title: 'Error',
+          description: 'This nickname is already taken. Please choose another one.',
+          variant: 'destructive',
+        });
+        throw new Error('Nickname already taken');
+      }
+
+      // Sign in anonymously
       const { data: { user: anonymousUser }, error: signInError } = await supabase.auth.signInAnonymously();
       if (signInError) throw signInError;
 
-      // Then update the user's metadata with their nickname
+      if (!anonymousUser) throw new Error('Failed to create user');
+
+      // Create user record in users table
+      const { error: createUserError } = await supabase
+        .from('users')
+        .insert({
+          user_id: anonymousUser.id,
+          id: anonymousUser.id, // Use the same ID for both auth and user record
+          name: nickname,
+          avatar: '💩', // Default avatar
+          total_time_weekly: 0
+        });
+
+      if (createUserError) throw createUserError;
+
+      // Update the user's metadata with their nickname
       const { error: updateError } = await supabase.auth.updateUser({
         data: { nickname }
       });
@@ -49,9 +80,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: `Welcome, ${nickname}!`,
       });
     } catch (error) {
+      console.error('Sign in error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to sign in. Please try again.',
+        description: error instanceof Error ? error.message : 'Failed to sign in. Please try again.',
         variant: 'destructive',
       });
       throw error;

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
+import { useAuth } from './AuthContext';
 
 // Types for our context
 type User = {
@@ -47,6 +48,7 @@ type PoopContextType = {
 const PoopContext = createContext<PoopContextType | undefined>(undefined);
 
 export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user: authUser } = useAuth();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [currentSession, setCurrentSession] = useState<PoopSession | null>(null);
@@ -65,6 +67,8 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Initialize data from Supabase
   useEffect(() => {
     async function fetchData() {
+      if (!authUser) return;
+      
       try {
         setIsLoading(true);
         
@@ -75,44 +79,6 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .order('total_time_weekly', { ascending: false });
           
         if (usersError) throw usersError;
-
-        // If no users exist, create a default user
-        if (!usersData || usersData.length === 0) {
-          const defaultUser = {
-            user_id: 'default-user-id',
-            name: 'ThroneMaster',
-            avatar: '💩',
-            total_time_weekly: 0
-          };
-          
-          const { data: newUser, error: createError } = await supabase
-            .from('users')
-            .insert(defaultUser)
-            .select()
-            .single();
-            
-          if (createError) throw createError;
-          
-          if (newUser) {
-            // Unlock the first achievement for the new user
-            const { data: achievements } = await supabase
-              .from('achievements')
-              .select('*')
-              .eq('name', 'First Timer')
-              .single();
-              
-            if (achievements) {
-              await supabase
-                .from('user_achievements')
-                .insert({
-                  user_id: newUser.id,
-                  achievement_id: achievements.id
-                });
-            }
-            
-            usersData.push(newUser);
-          }
-        }
 
         // Transform and set the users data
         const transformedUsers = await Promise.all(usersData.map(async (user) => {
@@ -171,9 +137,10 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setUsers(transformedUsers);
         
-        // Set the current user to the first user for now (in a real app, this would be the logged-in user)
-        if (transformedUsers.length > 0) {
-          setCurrentUser(transformedUsers[0]);
+        // Set the current user based on the authenticated user
+        const currentUserData = transformedUsers.find(u => u.id === authUser.id);
+        if (currentUserData) {
+          setCurrentUser(currentUserData);
         }
         
         // Find weekly winner (user with highest total time)
@@ -194,7 +161,7 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     fetchData();
-  }, []);
+  }, [authUser]); // Re-run when authUser changes
 
   const startPooping = async () => {
     if (isPooping || !currentUser) return;
