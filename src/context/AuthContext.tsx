@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { toast } from '@/components/ui/use-toast';
+import { useNavigate } from 'react-router-dom';
 
 type AuthContextType = {
   user: User | null;
@@ -15,7 +16,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
+  // Initialize auth state from stored session
   useEffect(() => {
     // Check active sessions and sets the user
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -24,13 +27,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // Listen for changes on auth state (sign in, sign out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // If user signed out, redirect to sign in page
+      if (!session?.user) {
+        navigate('/signin');
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const signIn = async (nickname: string) => {
     try {
@@ -75,10 +83,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (updateError) throw updateError;
 
+      // Store additional user data in localStorage
+      localStorage.setItem('userNickname', nickname);
+
       toast({
         title: 'Success',
         description: `Welcome, ${nickname}!`,
       });
+
+      // Redirect to home page after successful sign in
+      navigate('/');
     } catch (error) {
       console.error('Sign in error:', error);
       toast({
@@ -94,10 +108,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+
+      // Clear stored user data
+      localStorage.removeItem('userNickname');
+
       toast({
         title: 'Success',
         description: 'You have been signed out successfully.',
       });
+
+      // Navigate to sign in page
+      navigate('/signin');
     } catch (error) {
       toast({
         title: 'Error',
