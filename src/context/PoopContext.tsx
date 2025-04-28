@@ -67,7 +67,10 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Initialize data from Supabase
   useEffect(() => {
     async function fetchData() {
-      if (!authUser) return;
+      if (!authUser) {
+        setIsLoading(false);
+        return;
+      }
       
       try {
         setIsLoading(true);
@@ -161,7 +164,7 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     fetchData();
-  }, [authUser]); // Re-run when authUser changes
+  }, [authUser]);
 
   const startPooping = async () => {
     if (isPooping || !currentUser) return;

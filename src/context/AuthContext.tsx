@@ -42,23 +42,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (nickname: string) => {
     try {
-      // First, check if nickname is already taken
+      // Check if user with this nickname exists
       const { data: existingUser } = await supabase
         .from('users')
-        .select('name')
+        .select('*')
         .eq('name', nickname)
         .single();
 
       if (existingUser) {
-        toast({
-          title: 'Error',
-          description: 'This nickname is already taken. Please choose another one.',
-          variant: 'destructive',
+        // If user exists, sign in anonymously and link to existing user
+        const { data: { user: anonymousUser }, error: signInError } = await supabase.auth.signInAnonymously();
+        if (signInError) throw signInError;
+
+        if (!anonymousUser) throw new Error('Failed to sign in');
+
+        // Update the user's metadata with their nickname
+        const { error: updateError } = await supabase.auth.updateUser({
+          data: { nickname }
         });
-        throw new Error('Nickname already taken');
+        if (updateError) throw updateError;
+
+        // Store nickname in localStorage
+        localStorage.setItem('userNickname', nickname);
+
+        toast({
+          title: 'Success',
+          description: `Welcome back, ${nickname}!`,
+        });
+
+        // Redirect to home page
+        navigate('/');
+        return;
       }
 
-      // Sign in anonymously
+      // If user doesn't exist, create new account
       const { data: { user: anonymousUser }, error: signInError } = await supabase.auth.signInAnonymously();
       if (signInError) throw signInError;
 
@@ -69,9 +86,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('users')
         .insert({
           user_id: anonymousUser.id,
-          id: anonymousUser.id, // Use the same ID for both auth and user record
+          id: anonymousUser.id,
           name: nickname,
-          avatar: '💩', // Default avatar
+          avatar: '💩',
           total_time_weekly: 0
         });
 
@@ -83,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (updateError) throw updateError;
 
-      // Store additional user data in localStorage
+      // Store nickname in localStorage
       localStorage.setItem('userNickname', nickname);
 
       toast({
@@ -91,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: `Welcome, ${nickname}!`,
       });
 
-      // Redirect to home page after successful sign in
+      // Redirect to home page
       navigate('/');
     } catch (error) {
       console.error('Sign in error:', error);
