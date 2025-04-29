@@ -4,12 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 import AchievementBadge from './AchievementBadge';
 
 const UserProfile: React.FC = () => {
-  const { currentUser, updateUserAvatar, isLoading } = usePoopContext();
+  const { currentUser, updateUserAvatar, deductTime, isLoading } = usePoopContext();
   const [avatar, setAvatar] = useState(currentUser?.avatar || '');
   const [isEditing, setIsEditing] = useState(false);
+  const [deductSeconds, setDeductSeconds] = useState('');
   
   // Extended avatar options
   const avatarOptions = [
@@ -24,6 +26,15 @@ const UserProfile: React.FC = () => {
     }
     
     setIsEditing(false);
+  };
+  
+  const handleDeductTime = async () => {
+    const seconds = parseInt(deductSeconds);
+    if (isNaN(seconds) || seconds <= 0) {
+      return;
+    }
+    await deductTime(seconds);
+    setDeductSeconds('');
   };
   
   if (isLoading) {
@@ -122,6 +133,27 @@ const UserProfile: React.FC = () => {
           <div className="bg-gray-50 p-3 rounded-lg text-center">
             <p className="text-xs text-gray-500">Sessions</p>
             <p className="text-xl font-bold text-poop-dark">{currentUser.poopSessions.length}</p>
+          </div>
+        </div>
+        
+        <div className="mb-6">
+          <h3 className="font-medium mb-3">Deduct Time</h3>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              placeholder="Seconds to deduct"
+              value={deductSeconds}
+              onChange={(e) => setDeductSeconds(e.target.value)}
+              className="flex-1"
+              min="1"
+            />
+            <Button 
+              className="bg-poop hover:bg-poop-dark"
+              onClick={handleDeductTime}
+              disabled={!deductSeconds || parseInt(deductSeconds) <= 0}
+            >
+              Deduct
+            </Button>
           </div>
         </div>
         

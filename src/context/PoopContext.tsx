@@ -72,6 +72,7 @@ type PoopContextType = {
   stopPooping: () => void;
   updateUserName: (name: string) => void;
   updateUserAvatar: (avatar: string) => void;
+  deductTime: (seconds: number) => Promise<void>;
 };
 
 const PoopContext = createContext<PoopContextType | undefined>(undefined);
@@ -205,8 +206,20 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Set up real-time subscriptions
-        const poopSessionsSubscription = supabase
-          .channel('poop_sessions_changes')
+        const poopChannel = supabase.channel('poop_sessions_changes');
+        const userChannel = supabase.channel('user_updates');
+
+        // Debug channel state changes
+        poopChannel
+          .on('system', (status, payload) => {
+            console.log('Poop channel system event:', { status, payload });
+          })
+          .on('presence', (status, payload) => {
+            console.log('Poop channel presence event:', { status, payload });
+          })
+          .on('broadcast', (status, payload) => {
+            console.log('Poop channel broadcast event:', { status, payload });
+          })
           .on(
             'postgres_changes',
             {
@@ -215,45 +228,35 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
               table: 'poop_sessions'
             },
             async (payload: RealtimePoopSessionPayload) => {
-              console.log('Received poop session update:', payload); // Debug log
+              console.log('Received poop session update:', payload);
               if (!payload.new) return;
               const sessionData = payload.new;
               const userId = sessionData.user_id;
 
-              // Update the users state with the new session
+              // Fetch the latest data to ensure we're in sync
+              const { data: sessions } = await supabase
+                .from('poop_sessions')
+                .select('*')
+                .eq('user_id', userId)
+                .order('start_time', { ascending: false });
+
+              // Update the users state with fresh data
               setUsers(prevUsers => {
                 const updatedUsers = prevUsers.map(user => {
                   if (user.id === userId) {
-                    // Update or add the session to the user's sessions
-                    const existingSessionIndex = user.poopSessions.findIndex(
-                      s => s.id === sessionData.id
-                    );
-
-                    const updatedSession = {
-                      id: sessionData.id,
-                      startTime: new Date(sessionData.start_time),
-                      endTime: sessionData.end_time ? new Date(sessionData.end_time) : null,
-                      duration: sessionData.duration || null
-                    };
-
-                    let updatedSessions;
-                    if (existingSessionIndex >= 0) {
-                      // Update existing session
-                      updatedSessions = [...user.poopSessions];
-                      updatedSessions[existingSessionIndex] = updatedSession;
-                    } else {
-                      // Add new session
-                      updatedSessions = [...user.poopSessions, updatedSession];
-                    }
-
                     return {
                       ...user,
-                      poopSessions: updatedSessions
+                      poopSessions: (sessions || []).map(session => ({
+                        id: session.id,
+                        startTime: new Date(session.start_time),
+                        endTime: session.end_time ? new Date(session.end_time) : null,
+                        duration: session.duration || null
+                      }))
                     };
                   }
                   return user;
                 });
-                console.log('Updated users state:', updatedUsers); // Debug log
+                console.log('Updated users state:', updatedUsers);
                 return updatedUsers;
               });
 
@@ -261,37 +264,24 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (currentUser && userId === currentUser.id) {
                 setCurrentUser(prev => {
                   if (!prev) return null;
-                  const existingSessionIndex = prev.poopSessions.findIndex(
-                    s => s.id === sessionData.id
-                  );
-
-                  const updatedSession = {
-                    id: sessionData.id,
-                    startTime: new Date(sessionData.start_time),
-                    endTime: sessionData.end_time ? new Date(sessionData.end_time) : null,
-                    duration: sessionData.duration || null
-                  };
-
-                  let updatedSessions;
-                  if (existingSessionIndex >= 0) {
-                    updatedSessions = [...prev.poopSessions];
-                    updatedSessions[existingSessionIndex] = updatedSession;
-                  } else {
-                    updatedSessions = [...prev.poopSessions, updatedSession];
-                  }
-
                   return {
                     ...prev,
-                    poopSessions: updatedSessions
+                    poopSessions: (sessions || []).map(session => ({
+                      id: session.id,
+                      startTime: new Date(session.start_time),
+                      endTime: session.end_time ? new Date(session.end_time) : null,
+                      duration: session.duration || null
+                    }))
                   };
                 });
               }
             }
           );
 
-        // Also subscribe to user updates for total time changes
-        const userUpdatesSubscription = supabase
-          .channel('user_updates')
+        userChannel
+          .on('system', (status, payload) => {
+            console.log('User channel system event:', { status, payload });
+          })
           .on(
             'postgres_changes',
             {
@@ -300,56 +290,69 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
               table: 'users'
             },
             async (payload: RealtimeUserPayload) => {
-              console.log('Received user update:', payload); // Debug log
+              console.log('Received user update:', payload);
               if (!payload.new) return;
               const userData = payload.new;
               
-              // Update users array
-              setUsers(prevUsers => {
-                const updatedUsers = prevUsers.map(user => 
-                  user.id === userData.id 
-                    ? { 
-                        ...user, 
-                        totalTimeWeekly: userData.total_time_weekly || 0,
-                        name: userData.name,
-                        avatar: userData.avatar
-                      }
-                    : user
-                );
-                console.log('Updated users after user change:', updatedUsers); // Debug log
-                return updatedUsers;
-              });
+              // Fetch fresh data for the updated user
+              const { data: freshUserData } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', userData.id)
+                .single();
 
-              // Update current user if needed
-              if (currentUser && userData.id === currentUser.id) {
-                setCurrentUser(prev => 
-                  prev ? { 
-                    ...prev, 
-                    totalTimeWeekly: userData.total_time_weekly || 0,
-                    name: userData.name,
-                    avatar: userData.avatar
-                  } : null
-                );
-              }
+              if (freshUserData) {
+                // Update users array
+                setUsers(prevUsers => {
+                  const updatedUsers = prevUsers.map(user => 
+                    user.id === userData.id 
+                      ? { 
+                          ...user, 
+                          totalTimeWeekly: freshUserData.total_time_weekly || 0,
+                          name: freshUserData.name,
+                          avatar: freshUserData.avatar
+                        }
+                      : user
+                  );
+                  console.log('Updated users after user change:', updatedUsers);
+                  return updatedUsers;
+                });
 
-              // Update weekly winner if needed
-              if (weeklyWinner && userData.id === weeklyWinner.id) {
-                setWeeklyWinner(prev => 
-                  prev ? { 
-                    ...prev, 
-                    totalTimeWeekly: userData.total_time_weekly || 0,
-                    name: userData.name,
-                    avatar: userData.avatar
-                  } : null
-                );
+                // Update current user if needed
+                if (currentUser && userData.id === currentUser.id) {
+                  setCurrentUser(prev => 
+                    prev ? { 
+                      ...prev, 
+                      totalTimeWeekly: freshUserData.total_time_weekly || 0,
+                      name: freshUserData.name,
+                      avatar: freshUserData.avatar
+                    } : null
+                  );
+                }
+
+                // Update weekly winner if needed
+                if (weeklyWinner && userData.id === weeklyWinner.id) {
+                  setWeeklyWinner(prev => 
+                    prev ? { 
+                      ...prev, 
+                      totalTimeWeekly: freshUserData.total_time_weekly || 0,
+                      name: freshUserData.name,
+                      avatar: freshUserData.avatar
+                    } : null
+                  );
+                }
               }
             }
           );
 
         // Connect both channels
         Promise.all([
-          poopSessionsSubscription.subscribe(),
-          userUpdatesSubscription.subscribe()
+          poopChannel.subscribe((status) => {
+            console.log('Poop channel status:', status);
+          }),
+          userChannel.subscribe((status) => {
+            console.log('User channel status:', status);
+          })
         ]).then(() => {
           console.log('Successfully subscribed to real-time updates');
         }).catch(error => {
@@ -359,8 +362,8 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Cleanup subscriptions on unmount
         return () => {
           console.log('Cleaning up subscriptions');
-          poopSessionsSubscription.unsubscribe();
-          userUpdatesSubscription.unsubscribe();
+          poopChannel.unsubscribe();
+          userChannel.unsubscribe();
         };
       } catch (error) {
         console.error('Error fetching data from Supabase:', error);
@@ -747,6 +750,63 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const deductTime = async (seconds: number) => {
+    if (!currentUser || seconds <= 0) return;
+    
+    try {
+      const newTotalTime = Math.max(0, currentUser.totalTimeWeekly - seconds);
+      
+      // Update user's total time in database
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          total_time_weekly: newTotalTime,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentUser.id);
+        
+      if (userError) throw userError;
+      
+      // Update the local state
+      setCurrentUser(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          totalTimeWeekly: newTotalTime
+        };
+      });
+      
+      // Update the users array
+      setUsers(prev => 
+        prev.map(user => 
+          user.id === currentUser.id 
+            ? { ...user, totalTimeWeekly: newTotalTime }
+            : user
+        )
+      );
+      
+      // Check if this affects the weekly winner
+      if (weeklyWinner && weeklyWinner.id === currentUser.id) {
+        const newWinner = [...users]
+          .filter(u => u.id !== currentUser.id)
+          .sort((a, b) => b.totalTimeWeekly - a.totalTimeWeekly)[0];
+        setWeeklyWinner(newWinner || null);
+      }
+      
+      toast({
+        title: 'Time Deducted',
+        description: `Deducted ${formatTime(seconds)} from your total time.`,
+      });
+    } catch (error) {
+      console.error('Error deducting time:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to deduct time. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <PoopContext.Provider
       value={{
@@ -760,7 +820,8 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         startPooping,
         stopPooping,
         updateUserName,
-        updateUserAvatar
+        updateUserAvatar,
+        deductTime
       }}
     >
       {children}
