@@ -5,7 +5,6 @@ import Timer from '../components/Timer';
 import Leaderboard from '../components/Leaderboard';
 import WeeklyWinner from '../components/WeeklyWinner';
 import ActivePoopers from '../components/ActivePoopers';
-import PoopChat from '../components/PoopChat';
 import { Link } from 'react-router-dom';
 
 const Index = () => {
@@ -36,7 +35,6 @@ const Index = () => {
             
             <div className="mt-8 space-y-10">
               <ActivePoopers />
-              <PoopChat />
               <WeeklyWinner />
               <Leaderboard compact />
             </div>
