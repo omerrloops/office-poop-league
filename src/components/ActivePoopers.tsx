@@ -2,18 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { usePoopContext } from '@/context/PoopContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { supabase } from '@/integrations/supabase/client';
 
 // Fun poop-themed emojis and reactions
 const POOP_REACTIONS = [
   '💩', '🚽', '🧻', '😅', '🤣', '😳', '😬', '🤢', '🤮', '😷',
   '💨', '💦', '🔥', '❄️', '⏳', '⌛', '🎉', '🏆', '🙏', '🆘'
 ];
-
-type UserReaction = {
-  user_id: string;
-  reaction: string;
-};
 
 const ActivePoopers: React.FC = () => {
   const { users, currentUser } = usePoopContext();
@@ -29,79 +23,22 @@ const ActivePoopers: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Subscribe to user reactions
-  useEffect(() => {
+  const handleReaction = (userId: string, reaction: string) => {
     if (!currentUser) return;
 
-    const channel = supabase.channel('user_reactions');
-
-    channel
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_reactions'
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const reaction = payload.new as UserReaction;
-            setUserReactions(prev => ({
-              ...prev,
-              [reaction.user_id]: reaction.reaction
-            }));
-          } else if (payload.eventType === 'DELETE') {
-            const reaction = payload.old as UserReaction;
-            setUserReactions(prev => {
-              const newReactions = { ...prev };
-              delete newReactions[reaction.user_id];
-              return newReactions;
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    // Fetch existing reactions
-    const fetchReactions = async () => {
-      const { data } = await supabase
-        .from('user_reactions')
-        .select('*');
-
-      if (data) {
-        const reactions: Record<string, string> = {};
-        data.forEach((reaction: UserReaction) => {
-          reactions[reaction.user_id] = reaction.reaction;
-        });
-        setUserReactions(reactions);
+    setUserReactions(prev => {
+      // If the user already has this reaction, remove it
+      if (prev[userId] === reaction) {
+        const newReactions = { ...prev };
+        delete newReactions[userId];
+        return newReactions;
       }
-    };
-
-    fetchReactions();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [currentUser]);
-
-  const handleReaction = async (userId: string, reaction: string) => {
-    if (!currentUser) return;
-
-    // If the user already has this reaction, remove it
-    if (userReactions[userId] === reaction) {
-      await supabase
-        .from('user_reactions')
-        .delete()
-        .eq('user_id', userId);
-    } else {
-      // Otherwise, update or insert the reaction
-      await supabase
-        .from('user_reactions')
-        .upsert({
-          user_id: userId,
-          reaction
-        });
-    }
+      // Otherwise, add or update the reaction
+      return {
+        ...prev,
+        [userId]: reaction
+      };
+    });
   };
 
   // Find users who are currently pooping (have an active session)
@@ -125,30 +62,32 @@ const ActivePoopers: React.FC = () => {
         <CardTitle className="text-center text-poop-dark">Currently Pooping 🚽</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-4">
           {activePoopers.map(user => {
             const activeSession = user.poopSessions.find(session => session.endTime === null);
             if (!activeSession) return null;
 
             return (
-              <div key={user.id} className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="bg-poop-bg text-xl">
-                    {user.avatar}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="font-medium">{user.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {formatDuration(activeSession.startTime)}
-                  </p>
+              <div key={user.id} className="flex flex-col p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-3 mb-2">
+                  <Avatar className="w-10 h-10">
+                    <AvatarFallback className="bg-poop-bg text-xl">
+                      {user.avatar}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">{user.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatDuration(activeSession.startTime)}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex space-x-1">
+                <div className="flex flex-wrap gap-1 mt-2">
                   {POOP_REACTIONS.map(reaction => (
                     <button
                       key={reaction}
                       onClick={() => handleReaction(user.id, reaction)}
-                      className={`text-xl p-1 rounded-full transition-colors ${
+                      className={`text-xl p-1.5 rounded-full transition-colors ${
                         userReactions[user.id] === reaction
                           ? 'bg-poop text-white'
                           : 'hover:bg-gray-200'
