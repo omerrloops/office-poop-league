@@ -126,9 +126,18 @@ const UserProfile: React.FC = () => {
         )}
         
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-gray-50 p-3 rounded-lg text-center">
+          <div className="bg-gray-50 p-3 rounded-lg text-center relative">
             <p className="text-xs text-gray-500">Weekly Time</p>
             <p className="text-xl font-bold text-poop-dark">{formatTime(currentUser.totalTimeWeekly)}</p>
+            <Button 
+              size="sm"
+              variant="outline"
+              className="absolute top-2 right-2 w-8 h-8 p-0 text-sm"
+              onClick={() => deductTime(60)}
+              disabled={currentUser.totalTimeWeekly < 60}
+            >
+              -1
+            </Button>
           </div>
           <div className="bg-gray-50 p-3 rounded-lg text-center">
             <p className="text-xs text-gray-500">Sessions</p>
