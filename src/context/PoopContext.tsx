@@ -240,18 +240,20 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('user_id', userId)
                 .order('start_time', { ascending: false });
 
+              const transformedSessions = (sessions || []).map(session => ({
+                id: session.id,
+                startTime: new Date(session.start_time),
+                endTime: session.end_time ? new Date(session.end_time) : null,
+                duration: session.duration || null
+              }));
+
               // Update the users state with fresh data
               setUsers(prevUsers => {
                 const updatedUsers = prevUsers.map(user => {
                   if (user.id === userId) {
                     return {
                       ...user,
-                      poopSessions: (sessions || []).map(session => ({
-                        id: session.id,
-                        startTime: new Date(session.start_time),
-                        endTime: session.end_time ? new Date(session.end_time) : null,
-                        duration: session.duration || null
-                      }))
+                      poopSessions: transformedSessions
                     };
                   }
                   return user;
@@ -266,14 +268,19 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   if (!prev) return null;
                   return {
                     ...prev,
-                    poopSessions: (sessions || []).map(session => ({
-                      id: session.id,
-                      startTime: new Date(session.start_time),
-                      endTime: session.end_time ? new Date(session.end_time) : null,
-                      duration: session.duration || null
-                    }))
+                    poopSessions: transformedSessions
                   };
                 });
+
+                // Update current session and pooping state
+                const activeSession = transformedSessions.find(session => session.endTime === null);
+                if (activeSession) {
+                  setCurrentSession(activeSession);
+                  setIsPooping(true);
+                } else {
+                  setCurrentSession(null);
+                  setIsPooping(false);
+                }
               }
             }
           );
