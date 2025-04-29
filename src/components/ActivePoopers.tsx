@@ -2,10 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { usePoopContext } from '@/context/PoopContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { supabase } from '@/integrations/supabase/client';
+
+// Fun poop-themed emojis and reactions
+const POOP_REACTIONS = [
+  '💩', '🚽', '🧻', '😅', '🤣', '😳', '😬', '🤢', '🤮', '😷',
+  '💨', '💦', '🔥', '❄️', '⏳', '⌛', '🎉', '🏆', '🙏', '🆘'
+];
+
+type UserReaction = {
+  user_id: string;
+  reaction: string;
+};
 
 const ActivePoopers: React.FC = () => {
-  const { users } = usePoopContext();
+  const { users, currentUser } = usePoopContext();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [userReactions, setUserReactions] = useState<Record<string, string>>({});
 
   // Update current time every second
   useEffect(() => {
@@ -15,6 +28,81 @@ const ActivePoopers: React.FC = () => {
 
     return () => clearInterval(timer);
   }, []);
+
+  // Subscribe to user reactions
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const channel = supabase.channel('user_reactions');
+
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_reactions'
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const reaction = payload.new as UserReaction;
+            setUserReactions(prev => ({
+              ...prev,
+              [reaction.user_id]: reaction.reaction
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            const reaction = payload.old as UserReaction;
+            setUserReactions(prev => {
+              const newReactions = { ...prev };
+              delete newReactions[reaction.user_id];
+              return newReactions;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Fetch existing reactions
+    const fetchReactions = async () => {
+      const { data } = await supabase
+        .from('user_reactions')
+        .select('*');
+
+      if (data) {
+        const reactions: Record<string, string> = {};
+        data.forEach((reaction: UserReaction) => {
+          reactions[reaction.user_id] = reaction.reaction;
+        });
+        setUserReactions(reactions);
+      }
+    };
+
+    fetchReactions();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [currentUser]);
+
+  const handleReaction = async (userId: string, reaction: string) => {
+    if (!currentUser) return;
+
+    // If the user already has this reaction, remove it
+    if (userReactions[userId] === reaction) {
+      await supabase
+        .from('user_reactions')
+        .delete()
+        .eq('user_id', userId);
+    } else {
+      // Otherwise, update or insert the reaction
+      await supabase
+        .from('user_reactions')
+        .upsert({
+          user_id: userId,
+          reaction
+        });
+    }
+  };
 
   // Find users who are currently pooping (have an active session)
   const activePoopers = users.filter(user => 
@@ -49,11 +137,26 @@ const ActivePoopers: React.FC = () => {
                     {user.avatar}
                   </AvatarFallback>
                 </Avatar>
-                <div>
+                <div className="flex-1">
                   <p className="font-medium">{user.name}</p>
                   <p className="text-xs text-gray-500">
                     {formatDuration(activeSession.startTime)}
                   </p>
+                </div>
+                <div className="flex space-x-1">
+                  {POOP_REACTIONS.map(reaction => (
+                    <button
+                      key={reaction}
+                      onClick={() => handleReaction(user.id, reaction)}
+                      className={`text-xl p-1 rounded-full transition-colors ${
+                        userReactions[user.id] === reaction
+                          ? 'bg-poop text-white'
+                          : 'hover:bg-gray-200'
+                      }`}
+                    >
+                      {reaction}
+                    </button>
+                  ))}
                 </div>
               </div>
             );
