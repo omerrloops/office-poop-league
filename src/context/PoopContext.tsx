@@ -72,6 +72,7 @@ type PoopContextType = {
   stopPooping: () => void;
   updateUserName: (name: string) => void;
   updateUserAvatar: (avatar: string) => void;
+  deductTime: (seconds: number) => Promise<void>;
 };
 
 const PoopContext = createContext<PoopContextType | undefined>(undefined);
@@ -749,6 +750,63 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const deductTime = async (seconds: number) => {
+    if (!currentUser || seconds <= 0) return;
+    
+    try {
+      const newTotalTime = Math.max(0, currentUser.totalTimeWeekly - seconds);
+      
+      // Update user's total time in database
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          total_time_weekly: newTotalTime,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentUser.id);
+        
+      if (userError) throw userError;
+      
+      // Update the local state
+      setCurrentUser(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          totalTimeWeekly: newTotalTime
+        };
+      });
+      
+      // Update the users array
+      setUsers(prev => 
+        prev.map(user => 
+          user.id === currentUser.id 
+            ? { ...user, totalTimeWeekly: newTotalTime }
+            : user
+        )
+      );
+      
+      // Check if this affects the weekly winner
+      if (weeklyWinner && weeklyWinner.id === currentUser.id) {
+        const newWinner = [...users]
+          .filter(u => u.id !== currentUser.id)
+          .sort((a, b) => b.totalTimeWeekly - a.totalTimeWeekly)[0];
+        setWeeklyWinner(newWinner || null);
+      }
+      
+      toast({
+        title: 'Time Deducted',
+        description: `Deducted ${formatTime(seconds)} from your total time.`,
+      });
+    } catch (error) {
+      console.error('Error deducting time:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to deduct time. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <PoopContext.Provider
       value={{
@@ -762,7 +820,8 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         startPooping,
         stopPooping,
         updateUserName,
-        updateUserAvatar
+        updateUserAvatar,
+        deductTime
       }}
     >
       {children}
