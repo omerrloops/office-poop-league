@@ -84,6 +84,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: `Welcome back, ${nickname}!`,
         });
       } else {
+        // Check again for unique name before creating
+        const { data: nameTaken } = await supabase
+          .from('users')
+          .select('id')
+          .eq('name', nickname)
+          .maybeSingle();
+        if (nameTaken) {
+          toast({
+            title: 'Name Taken',
+            description: 'That name is already taken. Please choose another.',
+            variant: 'destructive',
+          });
+          return;
+        }
         // Create new user record
         const newUser = {
           id: anonymousUser.id,

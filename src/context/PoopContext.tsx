@@ -681,6 +681,21 @@ export const PoopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser || !name.trim()) return;
     
     try {
+      // Check if name is already taken by another user
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('name', name)
+        .neq('id', currentUser.id)
+        .maybeSingle();
+      if (existingUser) {
+        toast({
+          title: 'Name Taken',
+          description: 'That name is already taken. Please choose another.',
+          variant: 'destructive',
+        });
+        return;
+      }
       const { error } = await supabase
         .from('users')
         .update({ name })
