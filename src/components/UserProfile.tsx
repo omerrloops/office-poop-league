@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import AchievementBadge from './AchievementBadge';
 
 const UserProfile: React.FC = () => {
-  const { currentUser, updateUserAvatar, deductTime, isLoading } = usePoopContext();
+  const { currentUser, updateUserAvatar, updateUserName, deductTime, isLoading } = usePoopContext();
   const [avatar, setAvatar] = useState(currentUser?.avatar || '');
+  const [nickname, setNickname] = useState(currentUser?.name || '');
   const [isEditing, setIsEditing] = useState(false);
   
   // Extended avatar options
@@ -20,10 +21,12 @@ const UserProfile: React.FC = () => {
   ];
   
   const handleSave = () => {
-    if (avatar) {
+    if (avatar && avatar !== currentUser.avatar) {
       updateUserAvatar(avatar);
     }
-    
+    if (nickname && nickname !== currentUser.name) {
+      updateUserName(nickname);
+    }
     setIsEditing(false);
   };
   
@@ -68,6 +71,16 @@ const UserProfile: React.FC = () => {
           {isEditing ? (
             <div className="mb-4">
               <p className="text-sm font-medium text-gray-700 mb-2 text-center">
+                Change Nickname
+              </p>
+              <Input
+                value={nickname}
+                onChange={e => setNickname(e.target.value)}
+                placeholder="Enter new nickname"
+                className="mb-4"
+                maxLength={20}
+              />
+              <p className="text-sm font-medium text-gray-700 mb-2 text-center">
                 Select an Avatar
               </p>
               <div className="grid grid-cols-5 gap-2 max-h-32 overflow-y-auto p-2 border rounded-lg">
@@ -81,6 +94,14 @@ const UserProfile: React.FC = () => {
                   </button>
                 ))}
               </div>
+              <div className="flex justify-center space-x-2 mt-4">
+                <Button variant="outline" onClick={() => setIsEditing(false)}>
+                  Cancel
+                </Button>
+                <Button className="bg-poop hover:bg-poop-dark" onClick={handleSave}>
+                  Save
+                </Button>
+              </div>
             </div>
           ) : (
             <Avatar className="w-24 h-24 bg-poop-bg text-5xl">
@@ -92,15 +113,19 @@ const UserProfile: React.FC = () => {
         </div>
         
         {isEditing ? (
-          <div className="space-y-4 mb-6">
-            <div className="flex justify-center space-x-2">
-              <Button variant="outline" onClick={() => setIsEditing(false)}>
-                Cancel
-              </Button>
-              <Button className="bg-poop hover:bg-poop-dark" onClick={handleSave}>
-                Save
-              </Button>
-            </div>
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-bold">{currentUser.name}</h2>
+            <p className="text-sm text-gray-500">Poop Enthusiast</p>
+            <button
+              className="mt-2 text-sm text-poop hover:underline"
+              onClick={() => {
+                setNickname(currentUser.name);
+                setAvatar(currentUser.avatar);
+                setIsEditing(true);
+              }}
+            >
+              Edit Profile
+            </button>
           </div>
         ) : (
           <div className="text-center mb-6">
@@ -108,7 +133,11 @@ const UserProfile: React.FC = () => {
             <p className="text-sm text-gray-500">Poop Enthusiast</p>
             <button
               className="mt-2 text-sm text-poop hover:underline"
-              onClick={() => setIsEditing(true)}
+              onClick={() => {
+                setNickname(currentUser.name);
+                setAvatar(currentUser.avatar);
+                setIsEditing(true);
+              }}
             >
               Edit Profile
             </button>
